@@ -1,0 +1,18 @@
+pulse-agent/
+├── Cargo.toml
+├── pulse.example.toml          # Plantilla documentada de configuración
+├── Dockerfile                  # Imagen minimalista (FROM scratch o alpine)
+└── src/
+    ├── main.rs                 # Punto de entrada, CLI args y manejo de graceful shutdown
+    ├── config.rs               # Parseo y validación de pulse.toml
+    ├── state.rs                # Control de estado en memoria (evitar alertas repetidas)
+    ├── collectors/             # Módulos de recolección de datos
+    │   ├── mod.rs
+    │   ├── system.rs           # CPU, RAM, Disco, Temperaturas
+    │   ├── docker.rs           # Estado de contenedores, OOMKills, reinicios
+    │   └── http.rs             # Checks de disponibilidad y latencia de endpoints
+    └── notifiers/              # Canales de salida
+        ├── mod.rs              # Trait `Notifier`
+        ├── discord.rs          # Embeds limpios con colores según severidad
+        ├── telegram.rs         # Mensajes formateados en MarkdownV2
+        └── webhook.rs          # Payload JSON genérico
