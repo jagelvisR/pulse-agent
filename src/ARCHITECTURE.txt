@@ -1,18 +1,30 @@
 pulse-agent/
-├── Cargo.toml
-├── pulse.example.toml          # Plantilla documentada de configuración
-├── Dockerfile                  # Imagen minimalista (FROM scratch o alpine)
-└── src/
-    ├── main.rs                 # Punto de entrada, CLI args y manejo de graceful shutdown
-    ├── config.rs               # Parseo y validación de pulse.toml
-    ├── state.rs                # Control de estado en memoria (evitar alertas repetidas)
-    ├── collectors/             # Módulos de recolección de datos
-    │   ├── mod.rs
-    │   ├── system.rs           # CPU, RAM, Disco, Temperaturas
-    │   ├── docker.rs           # Estado de contenedores, OOMKills, reinicios
-    │   └── http.rs             # Checks de disponibilidad y latencia de endpoints
-    └── notifiers/              # Canales de salida
-        ├── mod.rs              # Trait `Notifier`
-        ├── discord.rs          # Embeds limpios con colores según severidad
-        ├── telegram.rs         # Mensajes formateados en MarkdownV2
-        └── webhook.rs          # Payload JSON genérico
+├── .github/
+│   └── workflows/
+│       └── release.yml          # CI/CD: binarios musl/Windows + imagen multi-arch ghcr.io
+├── src/
+│   ├── collectors/
+│   │   ├── mod.rs               # Exportación de módulos (system, docker, http)
+│   │   ├── system.rs            # CPU, RAM, disco, temperatura y Top procesos SO
+│   │   ├── docker.rs            # Estado contenedores + prefijos + RestartCount
+│   │   └── http.rs              # Status HTTP, latencia y días restantes SSL/TLS X.509
+│   ├── notifiers/
+│   │   ├── mod.rs               # Trait Notifier
+│   │   ├── discord.rs           # Embeds enriquecidos para Discord
+│   │   └── telegram.rs          # Mensajes formateados en HTML para Telegram
+│   ├── config.rs                # Parseo de pulse.toml + overrides PULSE_*
+│   ├── main.rs                  # CLI (--config, --ui, --test-alert) + Heartbeat loop
+│   ├── metrics.rs               # Snapshot circular en memoria (Arc<RwLock<...>>)
+│   ├── state.rs                 # Máquina de estados, cooldown y recuperación
+│   └── tui.rs                   # Interfaz ratatui + hilo eventos + filtro '/' + orden 's'
+├── .dockerignore                # Excluye /target, .git y secretos locales del build Docker
+├── .gitignore                   # Ignora /target, pulse.toml y .env
+├── Cargo.lock                   # Versiones exactas fijadas para builds reproducibles
+├── Cargo.toml                   # Dependencias y metadatos del paquete (version = "0.2.0")
+├── Dockerfile                   # Build multi-stage Alpine -> scratch (~6 MB)
+├── docker-compose.yml           # Despliegue en producción con pid: "host" y límites RAM
+├── EXPLICACION_TECNICA.md       # Documentación de arquitectura interna
+├── install.sh                   # Instalador/actualizador automático systemd para Linux
+├── LICENSE                      # Licencia MIT
+├── pulse.example.toml           # Plantilla pública de configuración
+└── README.md                    # Documentación principal en español

@@ -1,0 +1,32 @@
+services:
+  pulse-agent:
+    image: ghcr.io/jagelvisr/pulse-agent:latest
+    container_name: pulse-agent
+    restart: unless-stopped
+    pid: "host"
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      - PULSE_HOSTNAME=${PULSE_HOSTNAME:-prod-vps-01}
+      - PULSE_DISCORD_WEBHOOK=${PULSE_DISCORD_WEBHOOK}
+      # Descomenta si usas Telegram o Heartbeat:
+      # - PULSE_TELEGRAM_TOKEN=${PULSE_TELEGRAM_TOKEN}
+      # - PULSE_TELEGRAM_CHAT_ID=${PULSE_TELEGRAM_CHAT_ID}
+      # - PULSE_HEARTBEAT_URL=${PULSE_HEARTBEAT_URL}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./pulse.toml:/config/pulse.toml:ro
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 32M
+        reservations:
+          cpus: "0.05"
+          memory: 10M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

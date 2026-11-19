@@ -15,7 +15,7 @@
 - **Interfaz Interactiva en Terminal (`--ui`):** Panel estilo `htop`/`btop` construido con `ratatui` que incluye gráficas de líneas Braille en vivo para CPU y RAM, medidores de disco, estado de contenedores Docker (con contador de reinicios), latencia HTTP con días restantes de SSL, top de procesos del sistema operativo y registro de eventos.
 - **Búsqueda en Vivo, Ordenamiento y Navegación Completa:** Filtra cualquier panel en tiempo real con `/`, alterna el ordenamiento de procesos entre CPU y RAM con `s`, cambia de panel con `Tab` o clic izquierdo, y desplázate vertical (`↑/↓` o rueda) y horizontalmente (`←/→` o `Shift + Rueda`).
 - **Telemetría de Sistema y Procesos:** Monitorea uso global de CPU, RAM, particiones de disco, temperaturas de hardware y procesos individuales del sistema operativo que superen los umbrales de CPU o RAM configurados.
-- **Nativo para Docker:** Se conecta directamente a `/var/run/docker.sock` (Linux) o al *named pipe* de Docker Desktop (Windows) para detectar contenedores detenidos, en estado `unhealthy` o con bucles de reinicio (`RestartCount`), soportando filtrado por prefijo de nombre.
+- **Nativo para Docker:** Se conecta directamente a `/var/run/docker.sock` (Linux) o al *named pipe* de Docker Desktop (Windows) para detectar contenedores detenidos, en estado `unhealthy` o con bucles de reinicio (`RestartCount`), soportando filtrado por prefijo de nombre para Docker Compose y Swarm.
 - **Healthchecks HTTP y Vencimiento SSL/TLS:** Sondea periódicamente endpoints verificando códigos de estado HTTP esperados, tiempos límite (*timeouts*), latencia de respuesta y días restantes antes de que caduque el certificado X.509 en URLs `https://`.
 - **Heartbeat (*Dead Man's Switch*):** Envía pings periódicos a servicios externos (Healthchecks.io, Uptime Kuma) para avisar si el servidor completo pierde conectividad.
 - **Alertas Inteligentes, Cooldown y Secretos por Entorno:** Gestor de estado integrado que evita el spam de notificaciones repetidas, envía avisos automáticos de **Recuperado**, permite probar canales con `--test-alert` y soporta variables de entorno para credenciales.
@@ -24,7 +24,7 @@
 
 ## 🚀 Inicio Rápido
 
-### Opción 1: Docker Compose (Recomendado como Demonio en Segundo Plano)
+### Opción 1: Docker Compose (Recomendado para Contenedores)
 
 1. Descarga el archivo de configuración de ejemplo:
    ```bash
@@ -39,6 +39,9 @@ services:
     container_name: pulse-agent
     restart: unless-stopped
     pid: "host"
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
     environment:
       - PULSE_HOSTNAME=prod-vps-01
       - PULSE_DISCORD_WEBHOOK=[https://discord.com/api/webhooks/YOUR_ID/YOUR_TOKEN](https://discord.com/api/webhooks/YOUR_ID/YOUR_TOKEN)
@@ -48,6 +51,14 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./pulse.toml:/config/pulse.toml:ro
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 32M
+        reservations:
+          cpus: "0.05"
+          memory: 10M
 ```
 
 3. Inicia el contenedor:
@@ -68,7 +79,36 @@ docker run -d \
   ghcr.io/jagelvisr/pulse-agent:latest
 ```
 
-### Opción 3: Binario Independiente, Prueba de Alertas e Interfaz TUI (`--ui`)
+### Opción 3: Servicio Nativo `systemd` en Linux (Instalación/Actualización Automática)
+
+Instala o actualiza `pulse-agent` como servicio del sistema en Ubuntu/Debian (`x86_64` o `ARM64`) en un solo comando. El instalador crea el usuario sin privilegios `pulse-agent`, configura `/etc/pulse-agent/` sin sobrescribir tus archivos existentes y registra la unidad `systemd`:
+
+```bash
+curl -fsSL [https://raw.githubusercontent.com/jagelvisr/pulse-agent/main/install.sh](https://raw.githubusercontent.com/jagelvisr/pulse-agent/main/install.sh) | sudo bash
+```
+
+Luego configura tus webhooks en `/etc/pulse-agent/pulse.env` y tus endpoints en `/etc/pulse-agent/pulse.toml`:
+
+```bash
+sudo nano /etc/pulse-agent/pulse.env
+sudo nano /etc/pulse-agent/pulse.toml
+sudo systemctl restart pulse-agent
+```
+
+Comandos habituales de administración con `systemd`:
+
+```bash
+# Ver estado y consumo exacto de memoria:
+sudo systemctl status pulse-agent
+
+# Ver registros en tiempo real:
+sudo journalctl -u pulse-agent -f
+
+# Abrir la consola interactiva TUI sin detener el demonio:
+pulse-agent --config /etc/pulse-agent/pulse.toml --ui
+```
+
+### Opción 4: Binario Independiente Manual
 
 Descarga el binario precompilado para tu arquitectura desde la página de [Releases](https://github.com/jagelvisr/pulse-agent/releases):
 
@@ -87,16 +127,30 @@ chmod +x pulse-agent-linux-x86_64
 
 ---
 
-## ⌨️ Controles de la Interfaz TUI (`--ui`)
+## 💻 Referencia de Comandos CLI y Atajos TUI
 
-| Acción | Teclado | Mouse |
-| :--- | :--- | :--- |
-| **Filtrar paneles en tiempo real** | `/` (escribe filtro, `Enter` aplica, `Esc` limpia) | — |
-| **Alternar orden Top SO (CPU / RAM)** | `s` | — |
-| **Cambiar panel activo** | `Tab` | Clic izquierdo sobre el panel |
-| **Desplazamiento vertical** | `↑` / `↓` o `j` / `k` | Rueda hacia arriba / abajo |
-| **Desplazamiento horizontal** | `←` / `→` o `h` / `l` | `Shift` + Rueda del mouse |
-| **Salir de la interfaz** | `q` o `Ctrl+C` | — |
+### Flags de Línea de Comandos
+
+| Comando / Flag | Descripción |
+| :--- | :--- |
+| `pulse-agent` | Ejecuta el agente en modo demonio en segundo plano usando `pulse.toml`. |
+| `pulse-agent --config <RUTA>` | Especifica una ruta personalizada para el archivo de configuración TOML. |
+| `pulse-agent --ui` | Abre la interfaz gráfica interactiva en consola (TUI) con muestreo cada 2s. |
+| `pulse-agent --test-alert` | Envía una alerta de prueba a los canales activos (Discord/Telegram) y sale. |
+| `pulse-agent --help` | Muestra la ayuda completa de argumentos y versión del binario. |
+
+### Atajos Interactivos en Modo `--ui`
+
+| Tecla / Acción | Función |
+| :--- | :--- |
+| `/` | Activa el modo de búsqueda en vivo sobre todos los paneles (`Docker`, `HTTP`, `Top SO`, `Logs`). |
+| `Enter` | Fija el filtro escrito y devuelve el control a la navegación normal. |
+| `Esc` | Borra el texto del filtro activo y cierra la barra de búsqueda. |
+| `s` | Alterna el orden de la tabla **Top SO** entre mayor consumo de **CPU** (`CPU↓`) y **RAM** (`RAM↓`). |
+| `Tab` o **Clic izquierdo** | Cambia el panel activo (resaltado con borde cian). |
+| `↑` / `↓` o `j` / `k` o **Rueda** | Desplaza verticalmente las filas del panel activo. |
+| `←` / `→` o `h` / `l` o `Shift + Rueda` | Desplaza horizontalmente columnas y URLs largas. |
+| `q` o `Ctrl+C` | Restaura la terminal y cierra la aplicación de forma segura. |
 
 ---
 
@@ -115,6 +169,21 @@ Las variables de entorno sobrescriben los valores de `pulse.toml` y habilitan au
 ---
 
 ## ⚙️ Configuración (`pulse.toml`)
+
+### Parámetros de `[[http_checks]]` y `[heartbeat]`
+
+| Sección / Campo | Tipo | Por defecto | Descripción |
+| :--- | :--- | :--- | :--- |
+| `http_checks.name` | `String` | *(Requerido)* | Nombre identificador del endpoint en alertas y en la tabla TUI. |
+| `http_checks.url` | `String` | *(Requerido)* | URL completa a monitorear (`http://` o `https://`). |
+| `http_checks.expected_status` | `u16` | `200` | Código HTTP esperado para considerar el servicio saludable. |
+| `http_checks.timeout_secs` | `u64` | `5` | Tiempo máximo de espera antes de marcar caída o timeout. |
+| `http_checks.ssl_expiry_warning_days` | `i64` | `14` | Días mínimos de vigencia del certificado TLS/X.509 antes de alertar (`0` desactiva el chequeo SSL). |
+| `heartbeat.enabled` | `bool` | `false` | Activa el envío periódico de pings de supervivencia (*Dead Man's Switch*). |
+| `heartbeat.url` | `String` | — | URL receptora del ping HTTP `GET` (ej. Healthchecks.io o Uptime Kuma). |
+| `heartbeat.interval_secs` | `u64` | `300` | Frecuencia en segundos entre cada ping de Heartbeat (mínimo `10`). |
+
+### Ejemplo Completo (`pulse.toml`)
 
 ```toml
 [general]
