@@ -26,6 +26,14 @@ pub struct DiskInfo {
     pub used_percent: f32,
 }
 
+#[derive(Debug, Clone)]
+pub struct ProcessInfo {
+    pub pid: u32,
+    pub name: String,
+    pub cpu_percent: f32,
+    pub ram_mb: u64,
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct TelemetrySnapshot {
     pub cpu_percent: f32,
@@ -34,17 +42,26 @@ pub struct TelemetrySnapshot {
     pub cpu_history: VecDeque<f64>,
     pub ram_history: VecDeque<f64>,
     pub disks: Vec<DiskInfo>,
+    pub top_processes: Vec<ProcessInfo>,
     pub containers: Vec<ContainerInfo>,
     pub http_checks: Vec<HttpCheckInfo>,
     pub recent_logs: VecDeque<String>,
 }
 
 impl TelemetrySnapshot {
-    pub fn push_system_sample(&mut self, cpu: f32, ram: f32, temp: f32, disks: Vec<DiskInfo>) {
+    pub fn push_system_sample(
+        &mut self,
+        cpu: f32,
+        ram: f32,
+        temp: f32,
+        disks: Vec<DiskInfo>,
+        top_processes: Vec<ProcessInfo>,
+    ) {
         self.cpu_percent = cpu;
         self.ram_percent = ram;
         self.max_temp_c = temp;
         self.disks = disks;
+        self.top_processes = top_processes;
 
         if self.cpu_history.len() >= MAX_HISTORY {
             self.cpu_history.pop_front();
@@ -58,7 +75,7 @@ impl TelemetrySnapshot {
     }
 
     pub fn push_log(&mut self, msg: String) {
-        if self.recent_logs.len() >= 15 {
+        if self.recent_logs.len() >= 100 {
             self.recent_logs.pop_front();
         }
         self.recent_logs.push_back(msg);

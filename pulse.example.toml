@@ -1,0 +1,46 @@
+[general]
+hostname = "prod-vps-01"
+check_interval_secs = 30
+alert_cooldown_mins = 15
+
+[system]
+enabled = true
+cpu_threshold_percent = 85.0
+ram_threshold_percent = 90.0
+disk_threshold_percent = 85.0
+temp_threshold_celsius = 78.0
+process_cpu_threshold_percent = 80.0
+process_ram_threshold_mb = 2048
+
+[docker]
+enabled = true
+socket = "/var/run/docker.sock"
+# Dejar vacío [] para monitorear todos los contenedores, o indicar prefijos/nombres:
+watch_containers = []
+alert_on_unhealthy = true
+# Alerta si un contenedor suma >= N reinicios nuevos entre ciclos de chequeo (0 = desactivado)
+restart_delta_threshold = 1
+
+[[http_checks]]
+name = "API Principal"
+url = "https://api.interfaceslte.com/health"
+expected_status = 200
+timeout_secs = 5
+# Alerta cuando al certificado SSL/TLS le queden menos de N días (0 = desactivado)
+ssl_expiry_warning_days = 14
+
+[heartbeat]
+enabled = false
+url = "https://hc-ping.com/tu-uuid-aqui"
+interval_secs = 300
+
+[notifiers.discord]
+enabled = true
+# También puede definirse mediante la variable de entorno PULSE_DISCORD_WEBHOOK
+webhook_url = "https://discord.com/api/webhooks/YOUR_ID/YOUR_TOKEN"
+
+[notifiers.telegram]
+enabled = false
+# También pueden definirse mediante PULSE_TELEGRAM_TOKEN y PULSE_TELEGRAM_CHAT_ID
+bot_token = "123456789:ABCdefGHIjklMNOpqrSTUvwxYZ"
+chat_id = "-1001234567890"

@@ -1,12 +1,14 @@
 use crate::config::DockerConfig;
 use crate::metrics::{ContainerInfo, TelemetrySnapshot};
 use crate::state::{AlertEvent, Severity, StateManager};
-use bollard::container::ListContainersOptions;
+use bollard::container::{InspectContainerOptions, ListContainersOptions};
 use bollard::Docker;
+use std::collections::HashMap;
 use tracing::error;
 
 pub struct DockerCollector {
     client: Option<Docker>,
+    last_restart_counts: HashMap<String, i64>,
 }
 
 impl DockerCollector {
@@ -21,11 +23,14 @@ impl DockerCollector {
             .map_err(|e| error!("No se pudo inicializar cliente Docker: {:?}", e))
             .ok();
 
-        Self { client }
+        Self {
+            client,
+            last_restart_counts: HashMap::new(),
+        }
     }
 
     pub async fn check(
-        &self,
+        &mut self,
         cfg: &DockerConfig,
         state: &mut StateManager,
         snapshot: &mut TelemetrySnapshot,
@@ -59,19 +64,39 @@ impl DockerCollector {
                 .map(|s| s.trim_start_matches('/').to_string())
                 .unwrap_or_else(|| "unknown".into());
 
-            if !cfg.watch_containers.is_empty() && !cfg.watch_containers.contains(&name) {
+            if !cfg.watch_containers.is_empty()
+                && !cfg.watch_containers.iter().any(|w| name.starts_with(w))
+            {
                 continue;
             }
 
             let state_str = container.state.unwrap_or_default();
             let status_str = container.status.unwrap_or_default();
 
+            // Inspeccionar contenedor para obtener RestartCount real
+            let mut restart_count: i64 = 0;
+            if let Some(id) = container.id.as_deref() {
+                if let Ok(details) = docker
+                    .inspect_container(id, None::<InspectContainerOptions>)
+                    .await
+                {
+                    restart_count = details.restart_count.unwrap_or(0);
+                }
+            }
+
+            let display_status = if restart_count > 0 {
+                format!("{} (↻ {})", status_str, restart_count)
+            } else {
+                status_str.clone()
+            };
+
             snapshot.containers.push(ContainerInfo {
                 name: name.clone(),
                 state: state_str.clone(),
-                status: status_str.clone(),
+                status: display_status,
             });
 
+            // 1. Alerta de caída o estado unhealthy
             let is_down = state_str != "running";
             let is_unhealthy = cfg.alert_on_unhealthy && status_str.contains("(unhealthy)");
             let is_firing = is_down || is_unhealthy;
@@ -83,6 +108,29 @@ impl DockerCollector {
                 format!("Contenedor Docker: {}", name),
                 format!("Estado: `{}` | Detalle: `{}`", state_str, status_str),
                 Severity::Critical,
+            ) {
+                events.push(ev);
+            }
+
+            // 2. Alerta por incremento de reinicios (CrashLoop detection)
+            let prev_restarts = self
+                .last_restart_counts
+                .insert(name.clone(), restart_count)
+                .unwrap_or(restart_count);
+
+            let delta = restart_count.saturating_sub(prev_restarts);
+            let restart_firing = cfg.restart_delta_threshold > 0 && delta >= cfg.restart_delta_threshold;
+            let restart_key = format!("docker:restarts:{}", name);
+
+            if let Some(ev) = state.evaluate(
+                &restart_key,
+                restart_firing,
+                format!("Reinicios detectados en contenedor: {}", name),
+                format!(
+                    "El contenedor sumó **+{} reinicio(s)** en el último ciclo (Total acumulado: **{}**)",
+                    delta, restart_count
+                ),
+                Severity::Warning,
             ) {
                 events.push(ev);
             }

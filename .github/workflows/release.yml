@@ -1,36 +1,40 @@
-name: Release & Docker Build
+name: Release Static Binaries
 
 on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
 
 permissions:
   contents: write
-  packages: write
+
+env:
+  CARGO_TERM_COLOR: always
 
 jobs:
-  build-binaries:
-    name: Build (${{ matrix.os }} - ${{ matrix.target }})
+  build:
+    name: Build (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-musl
-            artifact_name: pulse-agent-linux-x86_64
-            bin_name: pulse-agent
-          - os: ubuntu-latest
-            target: aarch64-unknown-linux-musl
-            artifact_name: pulse-agent-linux-arm64
-            bin_name: pulse-agent
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            artifact_name: pulse-agent-windows-x86_64.exe
-            bin_name: pulse-agent.exe
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            asset_name: pulse-agent-linux-x86_64
+            use_zig: true
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-latest
+            asset_name: pulse-agent-linux-aarch64
+            use_zig: true
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            asset_name: pulse-agent-windows-x86_64.exe
+            use_zig: false
 
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Install Rust toolchain
@@ -38,53 +42,67 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      - name: Install musl tools (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y musl-tools gcc-aarch64-linux-gnu
-
-      - name: Build release binary
-        env:
-          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER: aarch64-linux-gnu-gcc
-        run: cargo build --release --target ${{ matrix.target }}
-
-      - name: Prepare artifact
-        shell: bash
-        run: cp target/${{ matrix.target }}/release/${{ matrix.bin_name }} ${{ matrix.artifact_name }}
-
-      - name: Upload to GitHub Release
-        uses: softprops/action-gh-release@v2
+      - name: Cache Cargo registry and build
+        uses: Swatinem/rust-cache@v2
         with:
-          files: ${{ matrix.artifact_name }}
+          key: ${{ matrix.target }}
 
-  build-docker:
-    name: Build & Push Docker Image
+      - name: Install Zig & cargo-zigbuild (Linux musl static)
+        if: matrix.use_zig
+        run: |
+          pipx install ziglang
+          cargo install --locked cargo-zigbuild
+
+      - name: Build static binary (Linux musl)
+        if: matrix.use_zig
+        run: |
+          cargo zigbuild --release --target ${{ matrix.target }}
+          mkdir -p dist
+          cp target/${{ matrix.target }}/release/pulse-agent dist/${{ matrix.asset_name }}
+          strip dist/${{ matrix.asset_name }} || true
+
+      - name: Build binary (Windows MSVC)
+        if: ${{ !matrix.use_zig }}
+        shell: pwsh
+        run: |
+          cargo build --release --target ${{ matrix.target }}
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Copy-Item target/${{ matrix.target }}/release/pulse-agent.exe dist/${{ matrix.asset_name }}
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset_name }}
+          path: dist/${{ matrix.asset_name }}
+
+  release:
+    name: Publish GitHub Release
+    needs: build
     runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          path: release-assets
+          merge-multiple: true
 
-      - name: Extract metadata (tags, labels)
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/${{ github.repository }}
-          tags: |
-            type=semver,pattern={{version}}
-            type=raw,value=latest
+      - name: Generate SHA256 checksums & include example config
+        working-directory: release-assets
+        run: |
+          sha256sum pulse-agent-* > SHA256SUMS.txt
+          cp ../pulse.example.toml .
 
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v6
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
         with:
-          context: .
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          generate_release_notes: true
+          files: |
+            release-assets/pulse-agent-linux-x86_64
+            release-assets/pulse-agent-linux-aarch64
+            release-assets/pulse-agent-windows-x86_64.exe
+            release-assets/SHA256SUMS.txt
+            release-assets/pulse.example.toml
