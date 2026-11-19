@@ -1,24 +1,25 @@
-# Rust / Cargo build artifacts
+# Artefactos de compilación de Rust
 /target
 **/*.rs.bk
 *.pdb
 
-# Sensitive configuration & environment files (keep pulse.example.toml tracked)
+# Binarios locales generados manualmente
+/pulse-agent
+/pulse-agent.exe
+/pulse-agent-linux-*
+/pulse-agent-windows-*
+/dist
+/release-assets
+
+# Archivos de configuración y secretos locales (se mantiene pulse.example.toml)
 pulse.toml
 .env
 .env.*
-!.env.example
+*.env
 
-# IDE & Editor folders (RustRover, VS Code, VSCodium)
-.idea/
-.vscode/
-*.swp
-*.swo
-
-# OS generated files
+# Logs temporales y archivos de sistema/IDE
+*.log
 .DS_Store
 Thumbs.db
-desktop.ini
-
-# Logs
-*.log
+.idea/
+.vscode/

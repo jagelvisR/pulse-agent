@@ -22,7 +22,7 @@
 
 ---
 
-## 🚀 Inicio Rápido
+## 🚀 Inicio Rápido (Producción)
 
 ### Opción 1: Docker Compose (Recomendado para Contenedores)
 
@@ -124,6 +124,48 @@ chmod +x pulse-agent-linux-x86_64
 # O abrir el panel interactivo en terminal (presiona 'q' o Ctrl+C para salir):
 ./pulse-agent-linux-x86_64 --config pulse.toml --ui
 ```
+
+---
+
+## 🛠️ Desarrollo Local y Comandos con `cargo`
+
+Clona el repositorio y crea tu archivo de configuración local (ignorado por Git):
+
+```bash
+git clone [https://github.com/jagelvisr/pulse-agent.git](https://github.com/jagelvisr/pulse-agent.git)
+cd pulse-agent
+cp pulse.example.toml pulse.toml
+```
+
+### Comandos Frecuentes en Desarrollo
+
+| Tarea | Comando |
+| :--- | :--- |
+| **Verificar compilación rápida** | `cargo check` |
+| **Ejecutar modo demonio (logs en consola)** | `cargo run -- --config pulse.toml` |
+| **Ejecutar interfaz interactiva TUI** | `cargo run -- --config pulse.toml --ui` |
+| **Probar envío de alertas (Discord / Telegram)** | `cargo run -- --config pulse.toml --test-alert` |
+| **Ver ayuda y flags disponibles** | `cargo run -- --help` |
+| **Compilar binario optimizado (Release)** | `cargo build --release` |
+
+### Probar con Variables de Entorno sin Editar `pulse.toml`
+
+* **Linux / macOS (Bash/Zsh):**
+  ```bash
+  PULSE_DISCORD_WEBHOOK="[https://discord.com/api/webhooks/TU_ID/TU_TOKEN](https://discord.com/api/webhooks/TU_ID/TU_TOKEN)" \
+    cargo run -- --config pulse.example.toml --test-alert
+
+  PULSE_HOSTNAME="dev-local" cargo run -- --config pulse.example.toml --ui
+  ```
+
+* **Windows (PowerShell):**
+  ```powershell
+  $env:PULSE_DISCORD_WEBHOOK="[https://discord.com/api/webhooks/TU_ID/TU_TOKEN](https://discord.com/api/webhooks/TU_ID/TU_TOKEN)"
+  cargo run -- --config pulse.example.toml --test-alert
+
+  $env:PULSE_HOSTNAME="dev-local"
+  cargo run -- --config pulse.example.toml --ui
+  ```
 
 ---
 
@@ -232,16 +274,6 @@ chat_id = "-1001234567890"
 
 ---
 
-## 🛠️ Compilar desde el Código Fuente
-
-```bash
-git clone [https://github.com/jagelvisr/pulse-agent.git](https://github.com/jagelvisr/pulse-agent.git)
-cd pulse-agent
-cargo build --release
-```
-
----
-
 ## 📄 Licencia
 
-Licencia MIT — consulta el archivo [LICENSE](LICENSE) para más detalles.
+Licencia MIT — consulta el archivo [LICENSE](LICENSE) para más detalles. [LICENSE](LICENSE) para más detalles.
